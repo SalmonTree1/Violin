@@ -1,0 +1,9 @@
+name = "aux-backend"
+main = "backend/src/index.js"
+compatibility_date = "2026-11-01"
+
+# Cloudflare D1 Database Binding
+[[d1_databases]]
+binding = "DB"
+database_name = "violin-db"
+database_id = "6feccca7-efaa-4c25-8dd0-3c6bb0149f66"
