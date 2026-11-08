@@ -63,7 +63,18 @@ export default {
                 });
             }
 
-            // RATE LIMIT CHECK: Max 3 submissions per device per 24 hours
+            // EXTRACT TRACK ID EARLY (needed for deduplication check)
+            const trackIdMatch = spotifyUrl.match(/track\/([a-zA-Z0-9]+)/);
+            const trackId = trackIdMatch ? trackIdMatch[1] : "unknown";
+
+            if (trackId === "unknown") {
+                return new Response(JSON.stringify({ error: "Could not parse track ID from Spotify URL." }), {
+                    status: 400,
+                    headers: { ...corsHeaders, "Content-Type": "application/json" }
+                });
+            }
+
+            // 1. RATE LIMIT CHECK: Max 3 total submissions per device per 24 hours
             const limitCheckQuery = `
                 SELECT COUNT(*) as count 
                 FROM submissions 
@@ -74,6 +85,21 @@ export default {
             if (limitResult && limitResult.count >= 3) {
                 return new Response(JSON.stringify({ error: "Daily limit reached! You can only drop 3 songs per day." }), {
                     status: 429,
+                    headers: { ...corsHeaders, "Content-Type": "application/json" }
+                });
+            }
+
+            // 2. TRACK-LEVEL DEDUPLICATION CHECK: Has this device already voted for THIS exact song today?
+            const duplicateCheckQuery = `
+                SELECT id 
+                FROM submissions 
+                WHERE device_id = ? AND track_id = ? AND created_at >= datetime('now', '-24 hours')
+            `;
+            const existingVote = await env.DB.prepare(duplicateCheckQuery).bind(deviceId, trackId).first();
+
+            if (existingVote) {
+                return new Response(JSON.stringify({ error: "You already dropped this track today! Pick a different song." }), {
+                    status: 400,
                     headers: { ...corsHeaders, "Content-Type": "application/json" }
                 });
             }
@@ -99,10 +125,6 @@ export default {
 
             const albumArt = metadata.thumbnail_url || "";
 
-            // extract unique track ID for grouping votes
-            const trackIdMatch = spotifyUrl.match(/track\/([a-zA-Z0-9]+)/);
-            const trackId = trackIdMatch ? trackIdMatch[1] : "unknown";
-
             // store submission in D1 database including device_id
             const insertQuery = `
                 INSERT INTO submissions (track_id, display_name, album_art, ig_handle, device_id)
@@ -114,7 +136,7 @@ export default {
                 .run();
 
             return new Response(JSON.stringify({ success: true, trackTitle: displayName }), {
-                headers: { ...corsHeaders, "Content-Type": "application/json" }
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
         }
 
