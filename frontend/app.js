@@ -1,6 +1,13 @@
 // violin Frontend Client Script
 const API_BASE_URL = "https://aux-backend.protikhamidaziz.workers.dev";
 
+// Generate or retrieve persistent anonymous device fingerprint (survives page refreshes)
+let deviceId = localStorage.getItem("lockr_device_id");
+if (!deviceId) {
+    deviceId = "dev_" + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+    localStorage.setItem("lockr_device_id", deviceId);
+}
+
 // Fetch and render the leaderboard
 async function loadLeaderboard() {
     const listContainer = document.getElementById("leaderboard-list");
@@ -58,7 +65,11 @@ document.getElementById("submit-form").addEventListener("submit", async (e) => {
         const response = await fetch(`${API_BASE_URL}/api/submit`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ spotify_url: spotifyUrl, ig_handle: igHandle })
+            body: JSON.stringify({ 
+                spotify_url: spotifyUrl, 
+                ig_handle: igHandle,
+                device_id: deviceId 
+            })
         });
 
         const data = await response.json();
