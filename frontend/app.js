@@ -15,14 +15,13 @@ async function loadLeaderboard() {
             return;
         }
 
-        // map song array objects into clean HTML cards
+        // map song array objects into clean HTML cards using unified display_name
         listContainer.innerHTML = songs.map((song, index) => `
             <div class="song-card">
                 <span class="song-rank">#${index + 1}</span>
                 <img src="${song.album_art || 'https://via.placeholder.com/50'}" alt="Album Art" width="50" height="50" class="song-art">
                 <div class="song-info">
-                    <div class="song-title">${escapeHtml(song.track_title)}</div>
-                    <div class="song-artist">${escapeHtml(song.artist_name)}</div>
+                    <div class="song-title">${escapeHtml(song.display_name)}</div>
                 </div>
                 <div>
                     <span class="song-badge">

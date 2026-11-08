@@ -24,8 +24,7 @@ export default {
             const query = `
                 SELECT 
                     track_id, 
-                    track_title, 
-                    artist_name, 
+                    display_name, 
                     album_art, 
                     COUNT(*) as submission_count 
                 FROM submissions 
@@ -69,26 +68,35 @@ export default {
 
             const metadata = await spotifyResponse.json();
 
-            // native oEmbed fields
-            const trackTitle = metadata.title || "Unknown Track";
-            const artistName = metadata.author_name || "Unknown Artist";
+            // DEBUGGING: This prints the exact raw JSON object from Spotify to your console if you run wrangler dev
+            console.log("Spotify oEmbed Payload:", JSON.stringify(metadata));
+
+            // Construct a clean unified single-line display name
+            // Spotify oEmbed title typically returns just the track name, but let's make sure it's never empty
+            let displayName = metadata.title || "Unknown Track";
+            
+            // If author_name happens to exist in some contexts, append it nicely
+            if (metadata.author_name && metadata.author_name !== displayName) {
+                displayName = `${metadata.author_name} - ${displayName}`;
+            }
+
             const albumArt = metadata.thumbnail_url || "";
 
             // extract unique track ID for grouping votes
             const trackIdMatch = spotifyUrl.match(/track\/([a-zA-Z0-9]+)/);
             const trackId = trackIdMatch ? trackIdMatch[1] : "unknown";
 
-            // store submission in D1 database
+            // store submission in D1 database using the new schema
             const insertQuery = `
-                INSERT INTO submissions (track_id, track_title, artist_name, album_art, ig_handle)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO submissions (track_id, display_name, album_art, ig_handle)
+                VALUES (?, ?, ?, ?)
             `;
 
             await env.DB.prepare(insertQuery)
-                .bind(trackId, trackTitle, artistName, albumArt, igHandle)
+                .bind(trackId, displayName, albumArt, igHandle)
                 .run();
 
-            return new Response(JSON.stringify({ success: true, trackTitle }), {
+            return new Response(JSON.stringify({ success: true, trackTitle: displayName }), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" }
             });
         }
