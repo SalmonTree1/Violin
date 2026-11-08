@@ -1,8 +1,6 @@
 // violin Worker Backend API
 // Entry point for Spotify metadata fetching and D1 DB execution
 
-// TODO: Write CORS headers, GET /api/leaderboard, and POST /api/submit endpoints done
-
 export default {
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
@@ -23,7 +21,6 @@ export default {
 
         // GET /api/leaderboard
         if (path === "/api/leaderboard" && method === "GET") {
-            // pulling the data
             const query = `
                 SELECT 
                     track_id, 
@@ -40,7 +37,6 @@ export default {
 
             const { results } = await env.DB.prepare(query).all();
 
-            // send to frontend as JSON string
             return new Response(JSON.stringify(results), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" }
             });
@@ -52,28 +48,37 @@ export default {
             const spotifyUrl = body.spotify_url;
             const igHandle = body.ig_handle || "Anonymous";
             
-            // basic safety check
+            // basic safety check for valid Spotify track link structure
             if (!spotifyUrl || !spotifyUrl.includes("open.spotify.com/track/")) {
-                return new Response(JSON.stringify({ error: "Invalid Spotify link" }), {
+                return new Response(JSON.stringify({ error: "Invalid Spotify track link" }), {
                     status: 400,
                     headers: { ...corsHeaders, "Content-Type": "application/json" }
                 });
             }
 
-            // fetch from oembed
+            // fetch metadata from Spotify oEmbed API safely
             const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(spotifyUrl)}`;
             const spotifyResponse = await fetch(oembedUrl);
+
+            if (!spotifyResponse.ok) {
+                return new Response(JSON.stringify({ error: "Could not fetch track metadata from Spotify. Check the link." }), {
+                    status: 400,
+                    headers: { ...corsHeaders, "Content-Type": "application/json" }
+                });
+            }
+
             const metadata = await spotifyResponse.json();
 
-            const titleParts = metadata.title.split(" by ");
-            const trackTitle = titleParts[0] || metadata.title;
-            const artistName = titleParts[1] || "Unknown Artist";
+            // native oEmbed fields
+            const trackTitle = metadata.title || "Unknown Track";
+            const artistName = metadata.author_name || "Unknown Artist";
             const albumArt = metadata.thumbnail_url || "";
 
+            // extract unique track ID for grouping votes
             const trackIdMatch = spotifyUrl.match(/track\/([a-zA-Z0-9]+)/);
             const trackId = trackIdMatch ? trackIdMatch[1] : "unknown";
 
-            // storing split data
+            // store submission in D1 database
             const insertQuery = `
                 INSERT INTO submissions (track_id, track_title, artist_name, album_art, ig_handle)
                 VALUES (?, ?, ?, ?, ?)
@@ -83,7 +88,6 @@ export default {
                 .bind(trackId, trackTitle, artistName, albumArt, igHandle)
                 .run();
 
-            // confirmation
             return new Response(JSON.stringify({ success: true, trackTitle }), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" }
             });
